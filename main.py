@@ -6,7 +6,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telebot import types
 
-TOKEN = '8581710745:AAG4HaEUkWLlvQofOJ23ZfMcWCyc07n6R4I'
+TOKEN = '8581710745:AAFq3pYlHowkbgRV-JiVD0rOt_Zap3dLTL8'
 bot = telebot.TeleBot(TOKEN)
 
 
