@@ -6,7 +6,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telebot import types
 
-TOKEN = '8581710745:AAG4HaEUkWLIvQof0J23ZfMcWCyc07n6R4I'bot = telebot.TeleBot(TOKEN)
+TOKEN = '8581710745:AAG4HaEUkWLIvQof0J23ZfMcWCyc07n6R4I'
+bot = telebot.TeleBot(TOKEN)
 
 CHANNEL_USERNAME = "@my_tiktok_bot_news"
 
