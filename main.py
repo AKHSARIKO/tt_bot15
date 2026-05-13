@@ -6,12 +6,12 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telebot import types
 
-TOKEN = '8581710745:AAG4HaEUkWLIvQof0J23ZfMcWCyc07n6R4I'
+TOKEN = '8581710745:AAG4HaEUkWLlvQofOJ23ZfMcWCyc07n6R4I'
 bot = telebot.TeleBot(TOKEN)
 
 CHANNEL_USERNAME = "@my_tiktok_bot_news"
 
-# === КОД ДЛЯ ОБХОДА ПЛАТНОГО ТАРИФА RENDER ===
+# === ВЕБ-СЕРВЕР ДЛЯ ОБХОДА ТАРИФА RENDER ===
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -20,25 +20,26 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Bot is alive!")
 
 def run_health_check_server():
-    # Render автоматически передает нужный порт в переменную PORT
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
     server.serve_forever()
 
-# Запускаем веб-сервер в фоновом потоке, чтобы Render был доволен
 threading.Thread(target=run_health_check_server, daemon=True).start()
+print("--- ВЕБ-СЕРВЕР ЗАПУЩЕН ---")
 # =============================================
 
 def get_welcome_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
-    btn_link = types.InlineKeyboardButton(text="📢 Подписаться на канал", url="@my_tiktok_bot_news")
+    btn_link = types.InlineKeyboardButton(text="📢 Подписаться на канал", url="/t.me/my_tiktok_bot_news")
     btn_check = types.InlineKeyboardButton(text="✅ Я подписался", callback_data="check_subscription")
-    btn_promo = types.InlineKeyboardButton(text="📦 Реклама", url="@AKHSARIKO")
+    btn_promo = types.InlineKeyboardButton(text="📦 Реклама", url="@AKHSARIKO") 
     markup.add(btn_link, btn_check, btn_promo)
     return markup
 
+# ПРИОРИТЕТНЫЙ ОБРАБОТЧИК СТАРТА
 @bot.message_handler(commands=['start'])
 def start(message):
+    print(f"--> Получена команда /start от пользователя {message.from_user.id}")
     welcome_text = "Привет! 👋 Чтобы получить доступ к функциям бота, подпишитесь на мой канал и затем нажмите кнопку «✅ Я подписался»."
     bot.send_message(message.chat.id, welcome_text, reply_markup=get_welcome_keyboard())
 
@@ -55,8 +56,10 @@ def check_user_sub(call):
     except Exception as e:
         bot.answer_callback_query(call.id, "⚠️ Ошибка проверки. Убедитесь, что бот назначен администратором канала.", show_alert=True)
 
-@bot.message_handler(func=lambda m: 'tiktok.com' in m.text or 'vt.tiktok' in m.text)
+# ОБРАБОТЧИК ССЫЛОК TIKTOK
+@bot.message_handler(func=lambda m: m.text and ('tiktok.com' in m.text or 'vt.tiktok' in m.text))
 def download_tt(message):
+    print(f"--> Получена ссылка на TikTok от пользователя {message.from_user.id}")
     user_id = message.from_user.id
     try:
         member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
@@ -68,8 +71,14 @@ def download_tt(message):
 
     msg = bot.send_message(message.chat.id, "⏳ Скачиваю видео, подождите...")
     try:
-        link = re.findall(r'https?://[^\s]+', message.text)[0]
-        options = {"url": link, "hd": 1}
+        found_links = re.findall(r'https?://[^\s]+', message.text)
+        if not found_links:
+            bot.edit_message_text("❌ Ссылка на TikTok не найдена в сообщении.", message.chat.id, msg.message_id)
+            return
+            
+        tiktok_url = found_links[0]
+        options = {"url": tiktok_url, "hd": 1}
+        
         res = requests.post("tikwm.com", data=options).json()
         
         if res.get('code') == 0:
@@ -77,8 +86,9 @@ def download_tt(message):
             bot.send_video(message.chat.id, video_url)
             bot.delete_message(message.chat.id, msg.message_id)
         else:
-            bot.edit_message_text("❌ Не удалось скачать видео. Проверьте ссылку.", message.chat.id, msg.message_id)
+            bot.edit_message_text("❌ Не удалось скачать видео. Возможно, оно приватное.", message.chat.id, msg.message_id)
     except Exception as e:
-        bot.edit_message_text("❌ Произошла ошибка при обработке ссылки.", message.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ Ошибка при обработке ссылки: {str(e)}", message.chat.id, msg.message_id)
 
+print("--- БОТ ЗАПУЩЕН И ПОДКЛЮЧЕН К TELEGRAM ---")
 bot.polling(none_stop=True)
