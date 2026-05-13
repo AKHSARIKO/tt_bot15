@@ -1,44 +1,45 @@
-import telebot
+    import telebot
 import requests
 import re
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from telebot import types
 
 TOKEN = '8581710745:AAG4HaEUkWLIvQof0J23ZfMcWCyc07n6R4I'
 bot = telebot.TeleBot(TOKEN)
 
-# НАСТРОЙКА: Укажите юзернейм вашего канала (обязательно с @)
-CHANNEL_USERNAME = "@my_tiktok_bot_news"  # Замените на реальное имя вашего канала
+CHANNEL_USERNAME = "@my_tiktok_bot_news"
+
+# === КОД ДЛЯ ОБХОДА ПЛАТНОГО ТАРИФА RENDER ===
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_health_check_server():
+    # Render автоматически передает нужный порт в переменную PORT
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# Запускаем веб-сервер в фоновом потоке, чтобы Render был доволен
+threading.Thread(target=run_health_check_server, daemon=True).start()
+# =============================================
 
 def get_welcome_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=1)
-    
-    # 1. Кнопка-ссылка на канал
-    btn_link = types.InlineKeyboardButton(
-        text="📢 Подписаться на канал", 
-        url="t.me"
-    )
-    
-    # 2. Кнопка проверки подписки
-    btn_check = types.InlineKeyboardButton(
-        text="✅ Я подписался", 
-        callback_data="check_subscription"
-    )
-    
-    # 3. Кнопка-ссылка на ваш личный профиль для рекламы
-    btn_promo = types.InlineKeyboardButton(
-        text="📦 Реклама", 
-        url="@AKHSARIKO"
-    )
-    
+    btn_link = types.InlineKeyboardButton(text="📢 Подписаться на канал", url="@my_tiktok_bot_news")
+    btn_check = types.InlineKeyboardButton(text="✅ Я подписался", callback_data="check_subscription")
+    btn_promo = types.InlineKeyboardButton(text="📦 Реклама", url="@AKHSARIKO")
     markup.add(btn_link, btn_check, btn_promo)
     return markup
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    welcome_text = (
-        "Привет! 👋 Чтобы получить доступ к функциям бота, "
-        "подпишитесь на мой канал и затем нажмите кнопку «✅ Я подписался»."
-    )
+    welcome_text = "Привет! 👋 Чтобы получить доступ к функциям бота, подпишитесь на мой канал и затем нажмите кнопку «✅ Я подписался»."
     bot.send_message(message.chat.id, welcome_text, reply_markup=get_welcome_keyboard())
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_subscription")
@@ -58,7 +59,6 @@ def check_user_sub(call):
 def download_tt(message):
     user_id = message.from_user.id
     try:
-        # Проверяем подписку перед скачиванием
         member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
         if member.status not in ['member', 'administrator', 'creator']:
             bot.send_message(message.chat.id, "⚠️ Сначала необходимо подписаться на канал!", reply_markup=get_welcome_keyboard())
@@ -69,10 +69,7 @@ def download_tt(message):
     msg = bot.send_message(message.chat.id, "⏳ Скачиваю видео, подождите...")
     try:
         link = re.findall(r'https?://[^\s]+', message.text)[0]
-        options = {
-            "url": link,
-            "hd": 1
-        }
+        options = {"url": link, "hd": 1}
         res = requests.post("tikwm.com", data=options).json()
         
         if res.get('code') == 0:
