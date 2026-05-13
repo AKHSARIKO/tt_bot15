@@ -1,35 +1,87 @@
 import telebot
 import requests
 import re
+from telebot import types
 
-TOKEN = '8581710745:AAHdq0waBFf8jUQWdw_wYQFSZlj04LItBA8' # Проверь, что тут твой актуальный токен!
+TOKEN = '8581710745:AAG4HaEUkWLIvQof0J23ZfMcWCyc07n6R4I'
 bot = telebot.TeleBot(TOKEN)
+
+# НАСТРОЙКА: Укажите юзернейм вашего канала (обязательно с @)
+CHANNEL_USERNAME = "@my_tiktok_bot_news"  # Замените на реальное имя вашего канала
+
+def get_welcome_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    
+    # 1. Кнопка-ссылка на канал
+    btn_link = types.InlineKeyboardButton(
+        text="📢 Подписаться на канал", 
+        url="t.me"
+    )
+    
+    # 2. Кнопка проверки подписки
+    btn_check = types.InlineKeyboardButton(
+        text="✅ Я подписался", 
+        callback_data="check_subscription"
+    )
+    
+    # 3. Кнопка-ссылка на ваш личный профиль для рекламы
+    btn_promo = types.InlineKeyboardButton(
+        text="📦 Реклама", 
+        url="@AKHSARIKO"
+    )
+    
+    markup.add(btn_link, btn_check, btn_promo)
+    return markup
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, 
-        "Привет! 👋 Я пришлю видео из TikTok прямо сюда без водяного знака.\n\n"
-        "📥 Просто отправь мне ссылку!")
+    welcome_text = (
+        "Привет! 👋 Чтобы получить доступ к функциям бота, "
+        "подпишитесь на мой канал и затем нажмите кнопку «✅ Я подписался»."
+    )
+    bot.send_message(message.chat.id, welcome_text, reply_markup=get_welcome_keyboard())
 
-@bot.message_handler(func=lambda m: 'tiktok.com' in m.text)
-def download_tt(message):
-    msg = bot.send_message(message.chat.id, "⏳ Обрабатываю видео, подожди немного...")
+@bot.callback_query_handler(func=lambda call: call.data == "check_subscription")
+def check_user_sub(call):
+    user_id = call.from_user.id
     try:
-        # Извлекаем чистую ссылку
+        member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        if member.status in ['member', 'administrator', 'creator']:
+            bot.answer_callback_query(call.id, "Спасибо за подписку!")
+            bot.send_message(call.message.chat.id, "🎉 Доступ открыт! Просто пришлите мне ссылку на ролик TikTok.")
+        else:
+            bot.answer_callback_query(call.id, "❌ Вы всё еще не подписались на канал!", show_alert=True)
+    except Exception as e:
+        bot.answer_callback_query(call.id, "⚠️ Ошибка проверки. Убедитесь, что бот назначен администратором канала.", show_alert=True)
+
+@bot.message_handler(func=lambda m: 'tiktok.com' in m.text or 'vt.tiktok' in m.text)
+def download_tt(message):
+    user_id = message.from_user.id
+    try:
+        # Проверяем подписку перед скачиванием
+        member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        if member.status not in ['member', 'administrator', 'creator']:
+            bot.send_message(message.chat.id, "⚠️ Сначала необходимо подписаться на канал!", reply_markup=get_welcome_keyboard())
+            return
+    except:
+        pass
+
+    msg = bot.send_message(message.chat.id, "⏳ Скачиваю видео, подождите...")
+    try:
         link = re.findall(r'https?://[^\s]+', message.text)[0]
-        
-        # Запрос к более стабильному API
         options = {
             "url": link,
             "hd": 1
         }
-        res = requests.post("https://tikwm.com", data=options).json()
+        res = requests.post("tikwm.com", data=options).json()
         
-        video_url = "https://tikwm.com" + res['data']['play']
-        
-        bot.send_video(message.chat.id, video_url, caption="✅ Готово! @ВашНик")
-        bot.delete_message(message.chat.id, msg.message_id)
+        if res.get('code') == 0:
+            video_url = "https://tikwm.com" + res['data']['play']
+            bot.send_video(message.chat.id, video_url)
+            bot.delete_message(message.chat.id, msg.message_id)
+        else:
+            bot.edit_message_text("❌ Не удалось скачать видео. Проверьте ссылку.", message.chat.id, msg.message_id)
     except Exception as e:
-        bot.edit_message_text(f"❌ Не удалось скачать. Попробуй другую ссылку или чуть позже.", message.chat.id, msg.message_id)
+        bot.edit_message_text("❌ Произошла ошибка при обработке ссылки.", message.chat.id, msg.message_id)
 
 bot.polling(none_stop=True)
